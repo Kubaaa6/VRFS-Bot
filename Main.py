@@ -72,8 +72,14 @@ init_db = patched_init_db2
 async def on_ready():
     print(f"{bot.user} has connected to Discord!")
     await init_db()
-    # Force global command sync
+    # Force global and per-guild command sync
     await bot.tree.sync()
+    for guild in bot.guilds:
+        try:
+            await bot.tree.sync(guild=guild)
+            print(f"Synced commands to guild: {guild.name} ({guild.id})")
+        except Exception as e:
+            print(f"Failed to sync to guild {guild.name}: {e}")
     print("Forced global command sync.")
     print(f"Synced {len(bot.tree._get_all_commands())} command(s)")
     # Set custom status

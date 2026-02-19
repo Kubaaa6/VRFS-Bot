@@ -53,7 +53,8 @@ async def on_ready():
     print(f"{bot.user} has connected to Discord!")
     await init_db()
     await bot.tree.sync()
-    print(f"Synced {len(bot.tree._get_all_commands())} command(s)")
+    synced_count = len(bot.tree._get_all_commands())
+    print(f"✅ Synced {synced_count} command(s) to Discord!")
     # Set custom status
     activity = discord.Activity(type=discord.ActivityType.watching, name="⭐ NOVA")
     await bot.change_presence(activity=activity)

@@ -529,4 +529,114 @@ async def removestats(
     emoji = stat_emojis.get(stat_type.lower(), "")
     await interaction.response.send_message(f"{emoji} Removed {count} {stat_type}(s) from {member.mention} for {division} GW{gw} Season {season}!")
 
+# --- Transfer Confirmation View ---
+class TransferConfirmView(discord.ui.View):
+    def __init__(self, member: discord.Member, team: discord.Role, fee: int, moderator: discord.Member, interaction: discord.Interaction, additional_info: str = None):
+        super().__init__(timeout=180)
+        self.member = member
+        self.team = team
+        self.fee = fee
+        self.moderator = moderator
+        self.interaction = interaction
+        self.additional_info = additional_info
+        self.value = None
+
+    @discord.ui.button(label="Agree", style=discord.ButtonStyle.success)
+    async def agree(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.member.add_roles(self.team)
+        await interaction.response.send_message(f"You have agreed to transfer to {self.team.name}!", ephemeral=True)
+        await self.interaction.followup.send(f"✅ {self.member.mention} has agreed to transfer to {self.team.mention} for £{self.fee}.")
+        self.value = True
+        self.stop()
+
+    @discord.ui.button(label="Disagree", style=discord.ButtonStyle.danger)
+    async def disagree(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("You have declined the transfer.", ephemeral=True)
+        await self.interaction.followup.send(f"❌ {self.member.mention} has declined the transfer to {self.team.mention}.")
+        self.value = False
+        self.stop()
+
+# --- Loan Confirmation View ---
+class LoanConfirmView(discord.ui.View):
+    def __init__(self, member: discord.Member, team: discord.Role, gws: int, release_clause: str, recall_option: str, moderator: discord.Member, interaction: discord.Interaction, additional_info: str = None):
+        super().__init__(timeout=180)
+        self.member = member
+        self.team = team
+        self.gws = gws
+        self.release_clause = release_clause
+        self.recall_option = recall_option
+        self.moderator = moderator
+        self.interaction = interaction
+        self.additional_info = additional_info
+        self.value = None
+
+    @discord.ui.button(label="Agree", style=discord.ButtonStyle.success)
+    async def agree(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.member.add_roles(self.team)
+        await interaction.response.send_message(f"You have agreed to join {self.team.name} on loan!", ephemeral=True)
+        await self.interaction.followup.send(f"✅ {self.member.mention} has agreed to a loan to {self.team.mention} for {self.gws} GWs. Recall: {self.recall_option.capitalize()}.")
+        self.value = True
+        self.stop()
+
+    @discord.ui.button(label="Disagree", style=discord.ButtonStyle.danger)
+    async def disagree(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("You have declined the loan.", ephemeral=True)
+        await self.interaction.followup.send(f"❌ {self.member.mention} has declined the loan to {self.team.mention}.")
+        self.value = False
+        self.stop()
+
+# --- /transfer command ---
+@bot.tree.command(name="transfer", description="Transfer a user to a team (with confirmation)")
+@app_commands.describe(member="Player to transfer", team="Team role to assign", fee="Transfer fee", additional_info="Additional info (optional)")
+async def transfer(interaction: discord.Interaction, member: discord.Member, team: discord.Role, fee: int, additional_info: str = None):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
+    embed = discord.Embed(title="VFA.GG Transactions", description=f"**Transfer Offer**\n{team.name} have submitted a transfer offer for {member.mention}.", color=discord.Color.green())
+    embed.set_author(name="NOVA", icon_url=bot.user.display_avatar.url)
+    embed.add_field(name="Player", value=member.mention, inline=False)
+    embed.add_field(name="Club", value=team.name, inline=True)
+    embed.add_field(name="Fee", value=f"£{fee}", inline=True)
+    if additional_info:
+        embed.add_field(name="Additional Info", value=additional_info, inline=False)
+    else:
+        embed.add_field(name="Additional Info", value="Use the buttons below to accept or decline.", inline=False)
+    view = TransferConfirmView(member, team, fee, interaction.user, interaction, additional_info)
+    try:
+        await member.send(embed=embed, view=view)
+        await interaction.response.send_message(f"Sent transfer confirmation to {member.mention}.")
+    except Exception:
+        await interaction.response.send_message(f"❌ Could not DM {member.mention}. They may have DMs closed.")
+
+# --- /loan command ---
+@bot.tree.command(name="loan", description="Loan a user to a team (with confirmation)")
+@app_commands.describe(member="Player to loan", team="Team role to assign", gws="Loan duration in GWs (1-22)", release_clause="Release clause (yes/no)", recall_option="Recall option (yes/no)", additional_info="Additional info (optional)")
+async def loan(interaction: discord.Interaction, member: discord.Member, team: discord.Role, gws: int, release_clause: str, recall_option: str, additional_info: str = None):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
+    if not 1 <= gws <= 22:
+        await interaction.response.send_message("❌ Loan duration must be between 1 and 22 GWs.")
+        return
+    if release_clause.lower() not in ["yes", "no"] or recall_option.lower() not in ["yes", "no"]:
+        await interaction.response.send_message("❌ Release clause and recall option must be 'yes' or 'no'.")
+        return
+    embed = discord.Embed(title="VFA.GG Transactions", description=f"**Loan Offer**\n{team.name} have submitted a loan offer for {member.mention}.", color=discord.Color.purple())
+    embed.set_author(name="NOVA", icon_url=bot.user.display_avatar.url)
+    embed.add_field(name="Player", value=member.mention, inline=False)
+    embed.add_field(name="Loaning Club", value=team.name, inline=True)
+    embed.add_field(name="Loan Duration", value=f"{gws} GWs", inline=True)
+    embed.add_field(name="Release Clause", value=release_clause.capitalize(), inline=True)
+    embed.add_field(name="Recall Option", value=recall_option.capitalize(), inline=True)
+    if additional_info:
+        embed.add_field(name="Additional Info", value=additional_info, inline=False)
+    else:
+        embed.add_field(name="Additional Info", value="Use the buttons below to accept or decline.", inline=False)
+    view = LoanConfirmView(member, team, gws, release_clause, recall_option, interaction.user, interaction, additional_info)
+    try:
+        await member.send(embed=embed, view=view)
+        await interaction.response.send_message(f"Sent loan confirmation to {member.mention}.")
+    except Exception:
+        await interaction.response.send_message(f"❌ Could not DM {member.mention}. They may have DMs closed.")
+
 bot.run(TOKEN)

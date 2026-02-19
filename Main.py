@@ -2,6 +2,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+from typing import Literal
 from dotenv import load_dotenv
 import aiosqlite
 
@@ -320,14 +321,15 @@ async def set_gw_season(interaction: discord.Interaction, gw: int, season: int):
     count="Number of stats to add",
     division="Division (Div 1, Div 2, or Div 3)"
 )
-@app_commands.choices(
-    division=[
-        app_commands.Choice(name="Div 1", value="Div 1"),
-        app_commands.Choice(name="Div 2", value="Div 2"),
-        app_commands.Choice(name="Div 3", value="Div 3")
-    ]
-)
-async def addstat(interaction: discord.Interaction, member: discord.Member, gw: int, season: int, stat_type: str, count: int, division: str = "Div 1"):
+async def addstat(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    gw: int,
+    season: int,
+    stat_type: str,
+    count: int,
+    division: Literal["Div 1", "Div 2", "Div 3"] = "Div 1"
+):
     if not is_moderator(interaction):
         await interaction.response.send_message("❌ You don't have permission to use this command")
         return
@@ -387,14 +389,15 @@ async def addstat(interaction: discord.Interaction, member: discord.Member, gw: 
     count="Number of stats to remove",
     division="Division (Div 1, Div 2, or Div 3)"
 )
-@app_commands.choices(
-    division=[
-        app_commands.Choice(name="Div 1", value="Div 1"),
-        app_commands.Choice(name="Div 2", value="Div 2"),
-        app_commands.Choice(name="Div 3", value="Div 3")
-    ]
-)
-async def removestats(interaction: discord.Interaction, member: discord.Member, gw: int, season: int, stat_type: str, count: int, division: str = "Div 1"):
+async def removestats(
+    interaction: discord.Interaction,
+    member: discord.Member,
+    gw: int,
+    season: int,
+    stat_type: str,
+    count: int,
+    division: Literal["Div 1", "Div 2", "Div 3"] = "Div 1"
+):
     if not is_moderator(interaction):
         await interaction.response.send_message("❌ You don't have permission to use this command")
         return

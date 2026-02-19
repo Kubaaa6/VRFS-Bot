@@ -639,4 +639,31 @@ async def loan(interaction: discord.Interaction, member: discord.Member, team: d
     except Exception:
         await interaction.response.send_message(f"❌ Could not DM {member.mention}. They may have DMs closed.")
 
+# Add team command
+@bot.tree.command(name="addteam", description="Create a new team (role) in the server")
+@app_commands.describe(team_name="Name of the team", color="Role color (hex or name, optional)")
+async def addteam(interaction: discord.Interaction, team_name: str, color: str = None):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
+    guild = interaction.guild
+    # Check if role exists
+    if discord.utils.get(guild.roles, name=team_name):
+        await interaction.response.send_message(f"❌ Team '{team_name}' already exists.")
+        return
+    # Parse color
+    role_color = discord.Color.default()
+    if color:
+        try:
+            if color.startswith("#"):
+                role_color = discord.Color(int(color[1:], 16))
+            else:
+                role_color = getattr(discord.Color, color.lower())()
+        except Exception:
+            await interaction.response.send_message("❌ Invalid color. Use hex (e.g. #ff0000) or a Discord color name.")
+            return
+    # Create role
+    await guild.create_role(name=team_name, color=role_color)
+    await interaction.response.send_message(f"✅ Team '{team_name}' created.")
+
 bot.run(TOKEN)

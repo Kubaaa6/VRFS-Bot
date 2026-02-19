@@ -36,6 +36,15 @@ async def init_db():
                 FOREIGN KEY(user_id) REFERENCES player_stats(user_id)
             )
         ''')
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS config (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+        ''')
+        # Initialize default GW and Season
+        await db.execute('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)', ('current_gw', '1'))
+        await db.execute('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)', ('current_season', '1'))
         await db.commit()
 
 @bot.event
@@ -169,6 +178,24 @@ async def profile(ctx, member: discord.Member = None):
 
     await ctx.send(embed=embed)
 
+# Set current GW and Season command (moderator only)
+@bot.command(name="set")
+@commands.check(is_moderator)
+async def set_gw_season(ctx, gw: int, season: int):
+    if not 1 <= gw <= 22:
+        await ctx.send("❌ GW must be between 1 and 22")
+        return
+    if season not in [1, 2, 3]:
+        await ctx.send("❌ Season must be 1, 2, or 3")
+        return
+    
+    async with aiosqlite.connect('vrfs_stats.db') as db:
+        await db.execute('UPDATE config SET value = ? WHERE key = ?', (str(gw), 'current_gw'))
+        await db.execute('UPDATE config SET value = ? WHERE key = ?', (str(season), 'current_season'))
+        await db.commit()
+    
+    await ctx.send(f"✅ Set current GW to {gw} and Season to {season}")
+
 # Add stat command (moderator only)
 @bot.command(name="addstat")
 @commands.check(is_moderator)
@@ -188,6 +215,17 @@ async def addstat(ctx, member: discord.Member, gw: int, season: int, stat_type: 
     
     if count <= 0:
         await ctx.send("❌ Count must be greater than 0")
+        return
+    
+    # Check if the GW and Season match current settings
+    async with aiosqlite.connect('vrfs_stats.db') as db:
+        async with db.execute('SELECT value FROM config WHERE key = ?', ('current_gw',)) as cursor:
+            current_gw = int((await cursor.fetchone())[0])
+        async with db.execute('SELECT value FROM config WHERE key = ?', ('current_season',)) as cursor:
+            current_season = int((await cursor.fetchone())[0])
+    
+    if gw != current_gw or season != current_season:
+        await ctx.send(f"❌ You can only add stats to the current GW! Current: GW{current_gw} Season {current_season}")
         return
     
     # Insert into database

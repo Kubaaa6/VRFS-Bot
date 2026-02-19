@@ -53,8 +53,7 @@ async def on_ready():
     print(f"{bot.user} has connected to Discord!")
     await init_db()
     await bot.tree.sync()
-    synced_count = len(bot.tree._get_all_commands())
-    print(f"✅ Synced {synced_count} command(s) to Discord!")
+    print(f"Synced {len(bot.tree._get_all_commands())} command(s)")
     # Set custom status
     activity = discord.Activity(type=discord.ActivityType.watching, name="⭐ NOVA")
     await bot.change_presence(activity=activity)
@@ -241,9 +240,24 @@ async def profile(interaction: discord.Interaction, member: discord.Member = Non
             if stat_type in stats:
                 stats[stat_type] = total
     
-    embed = discord.Embed(title=f"⭐ {member.name}'s Profile", color=discord.Color.gold())
+    # Calculate points
+    points = (stats["goal"] * 3) + (stats["assist"] * 2) + (stats["defender cleansheet"] * 1) + (stats["goalkeeper cleansheet"] * 1) + (stats["motm"] * 5) + (stats["totw"] * 10)
+    
+    # Determine rank
+    if points >= 300:
+        rank = "🔶 Platinum"
+    elif points >= 194:
+        rank = "🟡 Gold"
+    elif points >= 84:
+        rank = "⚪ Silver"
+    else:
+        rank = "🟤 Bronze"
+    
+    embed = discord.Embed(title=member.display_name, description=f"@{member.name}", color=discord.Color.gold())
     embed.set_author(name="NOVA", icon_url=bot.user.display_avatar.url)
     embed.set_thumbnail(url=member.display_avatar.url)
+    embed.add_field(name="Rank", value=rank, inline=False)
+    embed.add_field(name="Points", value=points, inline=True)
     embed.add_field(name="⚽ Goals", value=stats["goal"], inline=True)
     embed.add_field(name="🎯 Assists", value=stats["assist"], inline=True)
     embed.add_field(name="🛡️ Cleansheets (Defender)", value=stats["defender cleansheet"], inline=True)

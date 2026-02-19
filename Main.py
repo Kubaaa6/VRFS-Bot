@@ -54,6 +54,9 @@ async def on_ready():
     await init_db()
     await bot.tree.sync()
     print(f"Synced {len(bot.tree._get_all_commands())} command(s)")
+    # Set custom status
+    activity = discord.Activity(type=discord.ActivityType.watching, name="⭐ NOVA")
+    await bot.change_presence(activity=activity)
 
 # Check if user has moderator permissions
 def is_moderator(interaction: discord.Interaction) -> bool:
@@ -193,7 +196,8 @@ async def profile(interaction: discord.Interaction, member: discord.Member = Non
             if stat_type in stats:
                 stats[stat_type] = total
     
-    embed = discord.Embed(title=f"{member.name}'s Profile", color=discord.Color.blue())
+    embed = discord.Embed(title=f"⭐ {member.name}'s Profile", color=discord.Color.gold())
+    embed.set_author(name="NOVA", icon_url=bot.user.display_avatar.url)
     embed.set_thumbnail(url=member.display_avatar.url)
     embed.add_field(name="⚽ Goals", value=stats["goal"], inline=True)
     embed.add_field(name="🎯 Assists", value=stats["assist"], inline=True)
@@ -201,6 +205,7 @@ async def profile(interaction: discord.Interaction, member: discord.Member = Non
     embed.add_field(name="🧤 Cleansheets (Goalkeeper)", value=stats["goalkeeper cleansheet"], inline=True)
     embed.add_field(name="⭐ MOTM", value=stats["motm"], inline=True)
     embed.add_field(name="📊 TOTW", value=stats["totw"], inline=True)
+    embed.set_footer(text="NOVA - VRFS League")
     
     await interaction.response.send_message(embed=embed)
 

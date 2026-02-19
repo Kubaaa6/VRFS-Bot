@@ -20,9 +20,20 @@ async def init_db():
                 goals INTEGER DEFAULT 0,
                 assists INTEGER DEFAULT 0,
                 cleansheets_defender INTEGER DEFAULT 0,
-                cleansheets INTEGER DEFAULT 0,
+                cleansheets_goalkeeper INTEGER DEFAULT 0,
                 motm INTEGER DEFAULT 0,
                 totw INTEGER DEFAULT 0
+            )
+        ''')
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS player_gw_stats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                gw INTEGER,
+                season INTEGER,
+                stat_type TEXT,
+                count INTEGER,
+                FOREIGN KEY(user_id) REFERENCES player_stats(user_id)
             )
         ''')
         await db.commit()
@@ -121,80 +132,82 @@ async def profile(ctx, member: discord.Member = None):
         member = ctx.author
     
     async with aiosqlite.connect('vrfs_stats.db') as db:
-        async with db.execute('SELECT * FROM player_stats WHERE user_id = ?', (member.id,)) as cursor:
-            row = await cursor.fetchone()
+        # Get totals from GW stats
+        async with db.execute('''
+            SELECT stat_type, SUM(count) as total
+            FROM player_gw_stats
+            WHERE user_id = ?
+            GROUP BY stat_type
+        ''', (member.id,)) as cursor:
+            stats_data = await cursor.fetchall()
     
-    if row is None:
-        # Create new player profile
-        async with aiosqlite.connect('vrfs_stats.db') as db:
-            await db.execute('INSERT INTO player_stats (user_id) VALUES (?)', (member.id,))
-            await db.commit()
-        row = (member.id, 0, 0, 0, 0, 0, 0)
+    # Initialize all stats to 0
+    stats = {
+        "goal": 0,
+        "assist": 0,
+        "defender cleansheet": 0,
+        "goalkeeper cleansheet": 0,
+        "totw": 0,
+        "motm": 0
+    }
+    
+    # Update with actual values
+    if stats_data:
+        for stat_type, total in stats_data:
+            if stat_type in stats:
+                stats[stat_type] = total
     
     embed = discord.Embed(title=f"{member.name}'s Profile", color=discord.Color.blue())
     embed.set_thumbnail(url=member.display_avatar.url)
-    embed.add_field(name="⚽ Goals", value=row[1], inline=True)
-    embed.add_field(name="🎯 Assists", value=row[2], inline=True)
-    embed.add_field(name="🛡️ Cleansheets (Defender)", value=row[3], inline=True)
-    embed.add_field(name="🛡️ Cleansheets", value=row[4], inline=True)
-    embed.add_field(name="⭐ MOTM", value=row[5], inline=True)
-    embed.add_field(name="📊 TOTW", value=row[6], inline=True)
+    embed.add_field(name="⚽ Goals", value=stats["goal"], inline=True)
+    embed.add_field(name="🎯 Assists", value=stats["assist"], inline=True)
+    embed.add_field(name="🛡️ Cleansheets (Defender)", value=stats["defender cleansheet"], inline=True)
+    embed.add_field(name="🧤 Cleansheets (Goalkeeper)", value=stats["goalkeeper cleansheet"], inline=True)
+    embed.add_field(name="⭐ MOTM", value=stats["motm"], inline=True)
+    embed.add_field(name="📊 TOTW", value=stats["totw"], inline=True)
     
+
     await ctx.send(embed=embed)
 
-# Add stat commands (moderator only)
-@bot.command(name="addgoal")
+# Add stat command (moderator only)
+@bot.command(name="addstat")
 @commands.check(is_moderator)
-async def addgoal(ctx, member: discord.Member):
+async def addstat(ctx, member: discord.Member, gw: int, season: int, stat_type: str, count: int):
+    # Validate inputs
+    if not 1 <= gw <= 22:
+        await ctx.send("❌ GW must be between 1 and 22")
+        return
+    if season not in [1, 2, 3]:
+        await ctx.send("❌ Season must be 1, 2, or 3")
+        return
+    
+    valid_stats = ["goal", "assist", "defender cleansheet", "goalkeeper cleansheet", "totw", "motm"]
+    if stat_type.lower() not in valid_stats:
+        await ctx.send(f"❌ Stat type must be one of: {', '.join(valid_stats)}")
+        return
+    
+    if count <= 0:
+        await ctx.send("❌ Count must be greater than 0")
+        return
+    
+    # Insert into database
     async with aiosqlite.connect('vrfs_stats.db') as db:
         await db.execute('INSERT OR IGNORE INTO player_stats (user_id) VALUES (?)', (member.id,))
-        await db.execute('UPDATE player_stats SET goals = goals + 1 WHERE user_id = ?', (member.id,))
+        await db.execute('''
+            INSERT INTO player_gw_stats (user_id, gw, season, stat_type, count)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (member.id, gw, season, stat_type.lower(), count))
         await db.commit()
-    await ctx.send(f"⚽ Added goal to {member.mention}!")
-
-@bot.command(name="addassist")
-@commands.check(is_moderator)
-async def addassist(ctx, member: discord.Member):
-    async with aiosqlite.connect('vrfs_stats.db') as db:
-        await db.execute('INSERT OR IGNORE INTO player_stats (user_id) VALUES (?)', (member.id,))
-        await db.execute('UPDATE player_stats SET assists = assists + 1 WHERE user_id = ?', (member.id,))
-        await db.commit()
-    await ctx.send(f"🎯 Added assist to {member.mention}!")
-
-@bot.command(name="addmotm")
-@commands.check(is_moderator)
-async def addmotm(ctx, member: discord.Member):
-    async with aiosqlite.connect('vrfs_stats.db') as db:
-        await db.execute('INSERT OR IGNORE INTO player_stats (user_id) VALUES (?)', (member.id,))
-        await db.execute('UPDATE player_stats SET motm = motm + 1 WHERE user_id = ?', (member.id,))
-        await db.commit()
-    await ctx.send(f"⭐ Added MOTM to {member.mention}!")
-
-@bot.command(name="addcleansheet")
-@commands.check(is_moderator)
-async def addcleansheet(ctx, member: discord.Member):
-    async with aiosqlite.connect('vrfs_stats.db') as db:
-        await db.execute('INSERT OR IGNORE INTO player_stats (user_id) VALUES (?)', (member.id,))
-        await db.execute('UPDATE player_stats SET cleansheets = cleansheets + 1 WHERE user_id = ?', (member.id,))
-        await db.commit()
-    await ctx.send(f"🛡️ Added cleansheet to {member.mention}!")
-
-@bot.command(name="adddefendercleansheet")
-@commands.check(is_moderator)
-async def adddefendercleansheet(ctx, member: discord.Member):
-    async with aiosqlite.connect('vrfs_stats.db') as db:
-        await db.execute('INSERT OR IGNORE INTO player_stats (user_id) VALUES (?)', (member.id,))
-        await db.execute('UPDATE player_stats SET cleansheets_defender = cleansheets_defender + 1 WHERE user_id = ?', (member.id,))
-        await db.commit()
-    await ctx.send(f"🛡️ Added defender cleansheet to {member.mention}!")
-
-@bot.command(name="addtotw")
-@commands.check(is_moderator)
-async def addtotw(ctx, member: discord.Member):
-    async with aiosqlite.connect('vrfs_stats.db') as db:
-        await db.execute('INSERT OR IGNORE INTO player_stats (user_id) VALUES (?)', (member.id,))
-        await db.execute('UPDATE player_stats SET totw = totw + 1 WHERE user_id = ?', (member.id,))
-        await db.commit()
-    await ctx.send(f"📊 Added TOTW to {member.mention}!")
+    
+    stat_emojis = {
+        "goal": "⚽",
+        "assist": "🎯",
+        "defender cleansheet": "🛡️",
+        "goalkeeper cleansheet": "🧤",
+        "totw": "📊",
+        "motm": "⭐"
+    }
+    emoji = stat_emojis.get(stat_type.lower(), "")
+    await ctx.send(f"{emoji} Added {count} {stat_type}(s) to {member.mention} for GW{gw} Season {season}!")
 
 bot.run(TOKEN)

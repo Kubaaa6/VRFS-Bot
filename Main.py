@@ -1,6 +1,7 @@
 ﻿import os
 import discord
 from discord.ext import commands
+from discord import app_commands
 from dotenv import load_dotenv
 import aiosqlite
 
@@ -51,97 +52,125 @@ async def init_db():
 async def on_ready():
     print(f"{bot.user} has connected to Discord!")
     await init_db()
+    await bot.tree.sync()
+    print(f"Synced {len(bot.tree._get_all_commands())} command(s)")
 
 # Check if user has moderator permissions
-async def is_moderator(ctx):
-    return ctx.author.guild_permissions.administrator or ctx.author.guild_permissions.moderate_members
+def is_moderator(interaction: discord.Interaction) -> bool:
+    return interaction.user.guild_permissions.administrator or interaction.user.guild_permissions.moderate_members
 
 # Test command (anyone can use)
-@bot.command(name="ping")
-async def ping(ctx):
-    await ctx.send(f"Pong! {round(bot.latency * 1000)}ms")
+@bot.tree.command(name="ping", description="Check bot latency")
+async def ping(interaction: discord.Interaction):
+    await interaction.response.send_message(f"Pong! {round(bot.latency * 1000)}ms")
 
 # Kick command
-@bot.command(name="kick")
-@commands.check(is_moderator)
-async def kick(ctx, member: discord.Member, *, reason=None):
+@bot.tree.command(name="kick", description="Kick a user from the server")
+@app_commands.describe(member="User to kick", reason="Reason for kicking")
+async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = None):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
     if member.guild_permissions.administrator:
-        await ctx.send("Cannot kick an admin!")
+        await interaction.response.send_message("Cannot kick an admin!")
         return
     await member.kick(reason=reason)
-    await ctx.send(f"Kicked {member} for: {reason}")
+    await interaction.response.send_message(f"Kicked {member} for: {reason}")
 
 # Ban command
-@bot.command(name="ban")
-@commands.check(is_moderator)
-async def ban(ctx, member: discord.Member, *, reason=None):
+@bot.tree.command(name="ban", description="Ban a user from the server")
+@app_commands.describe(member="User to ban", reason="Reason for banning")
+async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = None):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
     if member.guild_permissions.administrator:
-        await ctx.send("Cannot ban an admin!")
+        await interaction.response.send_message("Cannot ban an admin!")
         return
     await member.ban(reason=reason)
-    await ctx.send(f"Banned {member} for: {reason}")
+    await interaction.response.send_message(f"Banned {member} for: {reason}")
 
 # Mute command
-@bot.command(name="mute")
-@commands.check(is_moderator)
-async def mute(ctx, member: discord.Member):
+@bot.tree.command(name="mute", description="Mute a user")
+@app_commands.describe(member="User to mute")
+async def mute(interaction: discord.Interaction, member: discord.Member):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
     await member.edit(mute=True)
-    await ctx.send(f"Muted {member}")
+    await interaction.response.send_message(f"Muted {member}")
 
 # Unmute command
-@bot.command(name="unmute")
-@commands.check(is_moderator)
-async def unmute(ctx, member: discord.Member):
+@bot.tree.command(name="unmute", description="Unmute a user")
+@app_commands.describe(member="User to unmute")
+async def unmute(interaction: discord.Interaction, member: discord.Member):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
     await member.edit(mute=False)
-    await ctx.send(f"Unmuted {member}")
+    await interaction.response.send_message(f"Unmuted {member}")
 
 # Clear messages command
-@bot.command(name="clear")
-@commands.check(is_moderator)
-async def clear(ctx, amount: int):
-    await ctx.channel.purge(limit=amount)
-    await ctx.send(f"Cleared {amount} messages")
+@bot.tree.command(name="clear", description="Clear messages from a channel")
+@app_commands.describe(amount="Number of messages to clear")
+async def clear(interaction: discord.Interaction, amount: int):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
+    await interaction.channel.purge(limit=amount)
+    await interaction.response.send_message(f"Cleared {amount} messages")
 
-# Sign command - assign user to team
-@bot.command(name="sign")
-@commands.check(is_moderator)
-async def sign(ctx, member: discord.Member, team: discord.Role):
+# Sign command
+@bot.tree.command(name="sign", description="Sign a user to a team")
+@app_commands.describe(member="Player to sign", team="Team role to assign")
+async def sign(interaction: discord.Interaction, member: discord.Member, team: discord.Role):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
     await member.add_roles(team)
-    await ctx.send(f"✅ {member} has been signed to {team.mention}")
+    await interaction.response.send_message(f"✅ {member} has been signed to {team.mention}")
 
-# Release command - remove user from team
-@bot.command(name="release")
-@commands.check(is_moderator)
-async def release(ctx, member: discord.Member):
-    # Remove all roles that could be teams (except @everyone)
+# Release command
+@bot.tree.command(name="release", description="Release a user from their team")
+@app_commands.describe(member="Player to release")
+async def release(interaction: discord.Interaction, member: discord.Member):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
     team_roles = [role for role in member.roles if role != member.guild.default_role]
     if team_roles:
         await member.remove_roles(*team_roles)
-        await ctx.send(f"📤 {member} has been released from {', '.join([r.mention for r in team_roles])}")
+        await interaction.response.send_message(f"📤 {member} has been released from {', '.join([r.mention for r in team_roles])}")
     else:
-        await ctx.send(f"{member} is not assigned to any team")
+        await interaction.response.send_message(f"{member} is not assigned to any team")
 
-# Welcome command - send welcome message to channel
-@bot.command(name="welcome")
-@commands.check(is_moderator)
-async def welcome(ctx, channel: discord.TextChannel, *, message: str):
+# Welcome command
+@bot.tree.command(name="welcome", description="Send a welcome message to a channel")
+@app_commands.describe(channel="Channel to send welcome message", message="Welcome message")
+async def welcome(interaction: discord.Interaction, channel: discord.TextChannel, message: str):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
     await channel.send(f"👋 {message}")
-    await ctx.send(f"✅ Welcome message sent to {channel.mention}")
+    await interaction.response.send_message(f"✅ Welcome message sent to {channel.mention}")
 
-# Goodbye command - send goodbye message for a user
-@bot.command(name="goodbye")
-@commands.check(is_moderator)
-async def goodbye(ctx, member: discord.Member):
-    await ctx.send(f"👋 {member.mention} has left the server. Goodbye!")
+# Goodbye command
+@bot.tree.command(name="goodbye", description="Send a goodbye message for a user")
+@app_commands.describe(member="Player leaving")
+async def goodbye(interaction: discord.Interaction, member: discord.Member):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
+    await interaction.response.send_message(f"👋 {member.mention} has left the server. Goodbye!")
 
-# Profile command - show player stats
-@bot.command(name="profile")
-async def profile(ctx, member: discord.Member = None):
+# Profile command
+@bot.tree.command(name="profile", description="View a player's profile and stats")
+@app_commands.describe(member="Player to view (leave empty for yourself)")
+async def profile(interaction: discord.Interaction, member: discord.Member = None):
     if member is None:
-        member = ctx.author
+        member = interaction.user
     
     async with aiosqlite.connect('vrfs_stats.db') as db:
-        # Get totals from GW stats
         async with db.execute('''
             SELECT stat_type, SUM(count) as total
             FROM player_gw_stats
@@ -150,7 +179,6 @@ async def profile(ctx, member: discord.Member = None):
         ''', (member.id,)) as cursor:
             stats_data = await cursor.fetchall()
     
-    # Initialize all stats to 0
     stats = {
         "goal": 0,
         "assist": 0,
@@ -160,7 +188,6 @@ async def profile(ctx, member: discord.Member = None):
         "motm": 0
     }
     
-    # Update with actual values
     if stats_data:
         for stat_type, total in stats_data:
             if stat_type in stats:
@@ -175,18 +202,20 @@ async def profile(ctx, member: discord.Member = None):
     embed.add_field(name="⭐ MOTM", value=stats["motm"], inline=True)
     embed.add_field(name="📊 TOTW", value=stats["totw"], inline=True)
     
+    await interaction.response.send_message(embed=embed)
 
-    await ctx.send(embed=embed)
-
-# Set current GW and Season command (moderator only)
-@bot.command(name="set")
-@commands.check(is_moderator)
-async def set_gw_season(ctx, gw: int, season: int):
+# Set current GW and Season command
+@bot.tree.command(name="set", description="Set current GameWeek and Season")
+@app_commands.describe(gw="GameWeek (1-22)", season="Season (1, 2, or 3)")
+async def set_gw_season(interaction: discord.Interaction, gw: int, season: int):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
     if not 1 <= gw <= 22:
-        await ctx.send("❌ GW must be between 1 and 22")
+        await interaction.response.send_message("❌ GW must be between 1 and 22")
         return
     if season not in [1, 2, 3]:
-        await ctx.send("❌ Season must be 1, 2, or 3")
+        await interaction.response.send_message("❌ Season must be 1, 2, or 3")
         return
     
     async with aiosqlite.connect('vrfs_stats.db') as db:
@@ -194,30 +223,38 @@ async def set_gw_season(ctx, gw: int, season: int):
         await db.execute('UPDATE config SET value = ? WHERE key = ?', (str(season), 'current_season'))
         await db.commit()
     
-    await ctx.send(f"✅ Set current GW to {gw} and Season to {season}")
+    await interaction.response.send_message(f"✅ Set current GW to {gw} and Season to {season}")
 
-# Add stat command (moderator only)
-@bot.command(name="addstat")
-@commands.check(is_moderator)
-async def addstat(ctx, member: discord.Member, gw: int, season: int, stat_type: str, count: int):
-    # Validate inputs
+# Add stat command
+@bot.tree.command(name="addstat", description="Add a stat to a player for current GW/Season")
+@app_commands.describe(
+    member="Player to add stats for",
+    gw="GameWeek (1-22)",
+    season="Season (1, 2, or 3)",
+    stat_type="Type of stat (goal, assist, defender cleansheet, goalkeeper cleansheet, totw, motm)",
+    count="Number of stats to add"
+)
+async def addstat(interaction: discord.Interaction, member: discord.Member, gw: int, season: int, stat_type: str, count: int):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
+    
     if not 1 <= gw <= 22:
-        await ctx.send("❌ GW must be between 1 and 22")
+        await interaction.response.send_message("❌ GW must be between 1 and 22")
         return
     if season not in [1, 2, 3]:
-        await ctx.send("❌ Season must be 1, 2, or 3")
+        await interaction.response.send_message("❌ Season must be 1, 2, or 3")
         return
     
     valid_stats = ["goal", "assist", "defender cleansheet", "goalkeeper cleansheet", "totw", "motm"]
     if stat_type.lower() not in valid_stats:
-        await ctx.send(f"❌ Stat type must be one of: {', '.join(valid_stats)}")
+        await interaction.response.send_message(f"❌ Stat type must be one of: {', '.join(valid_stats)}")
         return
     
     if count <= 0:
-        await ctx.send("❌ Count must be greater than 0")
+        await interaction.response.send_message("❌ Count must be greater than 0")
         return
     
-    # Check if the GW and Season match current settings
     async with aiosqlite.connect('vrfs_stats.db') as db:
         async with db.execute('SELECT value FROM config WHERE key = ?', ('current_gw',)) as cursor:
             current_gw = int((await cursor.fetchone())[0])
@@ -225,10 +262,9 @@ async def addstat(ctx, member: discord.Member, gw: int, season: int, stat_type: 
             current_season = int((await cursor.fetchone())[0])
     
     if gw != current_gw or season != current_season:
-        await ctx.send(f"❌ You can only add stats to the current GW! Current: GW{current_gw} Season {current_season}")
+        await interaction.response.send_message(f"❌ You can only add stats to the current GW! Current: GW{current_gw} Season {current_season}")
         return
     
-    # Insert into database
     async with aiosqlite.connect('vrfs_stats.db') as db:
         await db.execute('INSERT OR IGNORE INTO player_stats (user_id) VALUES (?)', (member.id,))
         await db.execute('''
@@ -246,6 +282,6 @@ async def addstat(ctx, member: discord.Member, gw: int, season: int, stat_type: 
         "motm": "⭐"
     }
     emoji = stat_emojis.get(stat_type.lower(), "")
-    await ctx.send(f"{emoji} Added {count} {stat_type}(s) to {member.mention} for GW{gw} Season {season}!")
+    await interaction.response.send_message(f"{emoji} Added {count} {stat_type}(s) to {member.mention} for GW{gw} Season {season}!")
 
 bot.run(TOKEN)

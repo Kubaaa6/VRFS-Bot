@@ -24,7 +24,8 @@ async def init_db():
                 cleansheets_defender INTEGER DEFAULT 0,
                 cleansheets_goalkeeper INTEGER DEFAULT 0,
                 motm INTEGER DEFAULT 0,
-                totw INTEGER DEFAULT 0
+                totw INTEGER DEFAULT 0,
+                position TEXT
             )
         ''')
         await db.execute('''
@@ -219,6 +220,12 @@ async def profile(interaction: discord.Interaction, member: discord.Member = Non
     if member is None:
         member = interaction.user
     
+    # Fetch position
+    async with aiosqlite.connect('vrfs_stats.db') as db:
+        async with db.execute('SELECT position FROM player_stats WHERE user_id = ?', (member.id,)) as cursor:
+            row = await cursor.fetchone()
+            position = row[0] if row and row[0] else "Not set"
+    
     async with aiosqlite.connect('vrfs_stats.db') as db:
         async with db.execute('''
             SELECT stat_type, SUM(count) as total
@@ -287,6 +294,8 @@ async def profile(interaction: discord.Interaction, member: discord.Member = Non
     embed.add_field(name="⭐ MOTM", value=stats["motm"], inline=True)
     embed.add_field(name="📊 TOTW", value=stats["totw"], inline=True)
     embed.set_footer(text="NOVA - VRFS League")
+    
+    embed.insert_field_at(0, name="Position", value=position, inline=False)
     
     await interaction.response.send_message(embed=embed)
 

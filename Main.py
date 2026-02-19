@@ -72,7 +72,9 @@ init_db = patched_init_db2
 async def on_ready():
     print(f"{bot.user} has connected to Discord!")
     await init_db()
+    # Force global command sync
     await bot.tree.sync()
+    print("Forced global command sync.")
     print(f"Synced {len(bot.tree._get_all_commands())} command(s)")
     # Set custom status
     activity = discord.Activity(type=discord.ActivityType.watching, name="⭐ NOVA")

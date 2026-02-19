@@ -64,4 +64,23 @@ async def clear(ctx, amount: int):
     await ctx.channel.purge(limit=amount)
     await ctx.send(f"Cleared {amount} messages")
 
+# Sign command - assign user to team
+@bot.command(name="sign")
+@commands.check(is_moderator)
+async def sign(ctx, member: discord.Member, team: discord.Role):
+    await member.add_roles(team)
+    await ctx.send(f"✅ {member} has been signed to {team.mention}")
+
+# Release command - remove user from team
+@bot.command(name="release")
+@commands.check(is_moderator)
+async def release(ctx, member: discord.Member):
+    # Remove all roles that could be teams (except @everyone)
+    team_roles = [role for role in member.roles if role != member.guild.default_role]
+    if team_roles:
+        await member.remove_roles(*team_roles)
+        await ctx.send(f"📤 {member} has been released from {', '.join([r.mention for r in team_roles])}")
+    else:
+        await ctx.send(f"{member} is not assigned to any team")
+
 bot.run(TOKEN)

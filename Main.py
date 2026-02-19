@@ -83,4 +83,17 @@ async def release(ctx, member: discord.Member):
     else:
         await ctx.send(f"{member} is not assigned to any team")
 
+# Welcome command - send welcome message to channel
+@bot.command(name="welcome")
+@commands.check(is_moderator)
+async def welcome(ctx, channel: discord.TextChannel, *, message: str):
+    await channel.send(f"👋 {message}")
+    await ctx.send(f"✅ Welcome message sent to {channel.mention}")
+
+# Goodbye command - send goodbye message for a user
+@bot.command(name="goodbye")
+@commands.check(is_moderator)
+async def goodbye(ctx, member: discord.Member):
+    await ctx.send(f"👋 {member.mention} has left the server. Goodbye!")
+
 bot.run(TOKEN)

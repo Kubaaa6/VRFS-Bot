@@ -179,7 +179,7 @@ async def sign(interaction: discord.Interaction, member: discord.Member, team: d
         await interaction.response.send_message("❌ You don't have permission to use this command")
         return
     # Prepare DM embed
-    embed = discord.Embed(title="VFA.GG Transactions", description=f"**Loan Offer**\n{team.name} have submitted a signing offer for {member.mention}.", color=discord.Color.blue())
+    embed = discord.Embed(title="VFA.GG Transactions", description=f"**Signing Offer**\n{team.name} have submitted a signing offer for {member.mention}.", color=discord.Color.blue())
     embed.set_author(name="NOVA", icon_url=bot.user.display_avatar.url)
     if club_badge_url:
         embed.set_thumbnail(url=club_badge_url)

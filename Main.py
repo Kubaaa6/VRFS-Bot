@@ -52,6 +52,22 @@ async def init_db():
         await db.execute('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)', ('current_season', '1'))
         await db.commit()
 
+# --- Add teams table to DB if missing ---
+async def ensure_teams_table():
+    async with aiosqlite.connect('vrfs_stats.db') as db:
+        await db.execute('''CREATE TABLE IF NOT EXISTS teams (team_name TEXT PRIMARY KEY, division TEXT)''')
+        await db.commit()
+
+# Patch DB init to ensure teams table
+old_init_db2 = init_db
+async def patched_init_db2():
+    await old_init_db2()
+    try:
+        await ensure_teams_table()
+    except Exception:
+        pass
+init_db = patched_init_db2
+
 @bot.event
 async def on_ready():
     print(f"{bot.user} has connected to Discord!")
@@ -641,8 +657,8 @@ async def loan(interaction: discord.Interaction, member: discord.Member, team: d
 
 # Add team command
 @bot.tree.command(name="addteam", description="Create a new team (role) in the server")
-@app_commands.describe(team_name="Name of the team", color="Role color (hex or name, optional)")
-async def addteam(interaction: discord.Interaction, team_name: str, color: str = None):
+@app_commands.describe(team_name="Name of the team", division="Division for the team", color="Role color (hex or name, optional)")
+async def addteam(interaction: discord.Interaction, team_name: str, division: Literal["Div 1", "Div 2", "Div 3"], color: str = None):
     if not is_moderator(interaction):
         await interaction.response.send_message("❌ You don't have permission to use this command")
         return
@@ -651,6 +667,13 @@ async def addteam(interaction: discord.Interaction, team_name: str, color: str =
     if discord.utils.get(guild.roles, name=team_name):
         await interaction.response.send_message(f"❌ Team '{team_name}' already exists.")
         return
+    # Check division team count
+    async with aiosqlite.connect('vrfs_stats.db') as db:
+        async with db.execute('SELECT COUNT(*) FROM teams WHERE division = ?', (division,)) as cursor:
+            count = (await cursor.fetchone())[0]
+        if count >= 10:
+            await interaction.response.send_message(f"❌ {division} already has 10 teams.")
+            return
     # Parse color
     role_color = discord.Color.default()
     if color:
@@ -664,6 +687,10 @@ async def addteam(interaction: discord.Interaction, team_name: str, color: str =
             return
     # Create role
     await guild.create_role(name=team_name, color=role_color)
-    await interaction.response.send_message(f"✅ Team '{team_name}' created.")
+    # Add to teams table
+    async with aiosqlite.connect('vrfs_stats.db') as db:
+        await db.execute('INSERT INTO teams (team_name, division) VALUES (?, ?)', (team_name, division))
+        await db.commit()
+    await interaction.response.send_message(f"✅ Team '{team_name}' created in {division}.")
 
 bot.run(TOKEN)

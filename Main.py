@@ -123,6 +123,50 @@ async def clear(interaction: discord.Interaction, amount: int):
     await interaction.channel.purge(limit=amount)
     await interaction.response.send_message(f"Cleared {amount} messages")
 
+# Delete channels command
+@bot.tree.command(name="deletechannels", description="Delete channels (specify a number or 'all')")
+@app_commands.describe(count="Number of channels to delete or 'all' to delete all channels")
+async def deletechannels(interaction: discord.Interaction, count: str):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
+    
+    await interaction.response.defer()
+    
+    channels_to_delete = []
+    
+    if count.lower() == "all":
+        # Get all channels
+        channels_to_delete = interaction.guild.channels
+    else:
+        # Try to convert to number
+        try:
+            num = int(count)
+            if num <= 0:
+                await interaction.followup.send("❌ Number must be greater than 0")
+                return
+            # Get the first N channels
+            channels_to_delete = interaction.guild.channels[:num]
+        except ValueError:
+            await interaction.followup.send("❌ Please specify a number or 'all'")
+            return
+    
+    if not channels_to_delete:
+        await interaction.followup.send("❌ No channels to delete")
+        return
+    
+    deleted_count = 0
+    for channel in channels_to_delete:
+        try:
+            await channel.delete()
+            deleted_count += 1
+        except discord.Forbidden:
+            pass  # Skip channels we don't have permission to delete
+        except discord.HTTPException:
+            pass  # Skip channels with errors
+    
+    await interaction.followup.send(f"🗑️ Deleted {deleted_count} channel(s)")
+
 # Sign command
 @bot.tree.command(name="sign", description="Sign a user to a team")
 @app_commands.describe(member="Player to sign", team="Team role to assign")

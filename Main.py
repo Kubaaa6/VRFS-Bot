@@ -18,6 +18,11 @@ async def on_ready():
 async def is_moderator(ctx):
     return ctx.author.guild_permissions.administrator or ctx.author.guild_permissions.moderate_members
 
+# Test command (anyone can use)
+@bot.command(name="ping")
+async def ping(ctx):
+    await ctx.send(f"Pong! {round(bot.latency * 1000)}ms")
+
 # Kick command
 @bot.command(name="kick")
 @commands.check(is_moderator)

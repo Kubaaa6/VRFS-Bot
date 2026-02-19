@@ -172,14 +172,51 @@ async def deletechannels(interaction: discord.Interaction, count: str):
     await interaction.followup.send(f"🗑️ Deleted {deleted_count} channel(s)")
 
 # Sign command
-@bot.tree.command(name="sign", description="Sign a user to a team")
-@app_commands.describe(member="Player to sign", team="Team role to assign")
-async def sign(interaction: discord.Interaction, member: discord.Member, team: discord.Role):
+@bot.tree.command(name="sign", description="Sign a user to a team (with confirmation)")
+@app_commands.describe(member="Player to sign", team="Team role to assign", club_badge_url="URL of the club badge (optional)")
+async def sign(interaction: discord.Interaction, member: discord.Member, team: discord.Role, club_badge_url: str = None):
     if not is_moderator(interaction):
         await interaction.response.send_message("❌ You don't have permission to use this command")
         return
-    await member.add_roles(team)
-    await interaction.response.send_message(f"✅ {member} has been signed to {team.mention}")
+    # Prepare DM embed
+    embed = discord.Embed(title="VFA.GG Transactions", description=f"**Loan Offer**\n{team.name} have submitted a signing offer for {member.mention}.", color=discord.Color.blue())
+    embed.set_author(name="NOVA", icon_url=bot.user.display_avatar.url)
+    if club_badge_url:
+        embed.set_thumbnail(url=club_badge_url)
+    embed.add_field(name="Player", value=member.mention, inline=False)
+    embed.add_field(name="Club", value=team.name, inline=True)
+    embed.add_field(name="Additional Info", value="Use the buttons below to accept or decline.", inline=False)
+    view = SignConfirmView(member, team, interaction.user, interaction)
+    try:
+        await member.send(embed=embed, view=view)
+        await interaction.response.send_message(f"Sent signing confirmation to {member.mention}.")
+    except Exception:
+        await interaction.response.send_message(f"❌ Could not DM {member.mention}. They may have DMs closed.")
+
+# --- Signing Confirmation View ---
+class SignConfirmView(discord.ui.View):
+    def __init__(self, member: discord.Member, team: discord.Role, moderator: discord.Member, interaction: discord.Interaction):
+        super().__init__(timeout=180)
+        self.member = member
+        self.team = team
+        self.moderator = moderator
+        self.interaction = interaction
+        self.value = None
+
+    @discord.ui.button(label="Agree", style=discord.ButtonStyle.success)
+    async def agree(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.member.add_roles(self.team)
+        await interaction.response.send_message(f"You have agreed to join {self.team.name}!", ephemeral=True)
+        await self.interaction.followup.send(f"✅ {self.member.mention} has agreed to join {self.team.mention}.")
+        self.value = True
+        self.stop()
+
+    @discord.ui.button(label="Disagree", style=discord.ButtonStyle.danger)
+    async def disagree(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message("You have declined the signing.", ephemeral=True)
+        await self.interaction.followup.send(f"❌ {self.member.mention} has declined the signing to {self.team.mention}.")
+        self.value = False
+        self.stop()
 
 # Release command
 @bot.tree.command(name="release", description="Release a user from their team")

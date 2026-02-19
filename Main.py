@@ -377,4 +377,74 @@ async def addstat(interaction: discord.Interaction, member: discord.Member, gw: 
     emoji = stat_emojis.get(stat_type.lower(), "")
     await interaction.response.send_message(f"{emoji} Added {count} {stat_type}(s) to {member.mention} for {division} GW{gw} Season {season}!")
 
+# Remove stat command
+@bot.tree.command(name="removestats", description="Remove a stat from a player for a specific GW/Season")
+@app_commands.describe(
+    member="Player to remove stats from",
+    gw="GameWeek (1-22)",
+    season="Season (1, 2, or 3)",
+    stat_type="Type of stat (goal, assist, defender cleansheet, goalkeeper cleansheet, totw, motm)",
+    count="Number of stats to remove",
+    division="Division (Div 1, Div 2, or Div 3)"
+)
+@app_commands.choices(
+    division=[
+        app_commands.Choice(name="Div 1", value="Div 1"),
+        app_commands.Choice(name="Div 2", value="Div 2"),
+        app_commands.Choice(name="Div 3", value="Div 3")
+    ]
+)
+async def removestats(interaction: discord.Interaction, member: discord.Member, gw: int, season: int, stat_type: str, count: int, division: str = "Div 1"):
+    if not is_moderator(interaction):
+        await interaction.response.send_message("❌ You don't have permission to use this command")
+        return
+    
+    if not 1 <= gw <= 22:
+        await interaction.response.send_message("❌ GW must be between 1 and 22")
+        return
+    if season not in [1, 2, 3]:
+        await interaction.response.send_message("❌ Season must be 1, 2, or 3")
+        return
+    
+    valid_stats = ["goal", "assist", "defender cleansheet", "goalkeeper cleansheet", "totw", "motm"]
+    if stat_type.lower() not in valid_stats:
+        await interaction.response.send_message(f"❌ Stat type must be one of: {', '.join(valid_stats)}")
+        return
+    
+    if count <= 0:
+        await interaction.response.send_message("❌ Count must be greater than 0")
+        return
+    
+    async with aiosqlite.connect('vrfs_stats.db') as db:
+        # Check if the stat exists
+        async with db.execute('''
+            SELECT COUNT(*) as count FROM player_gw_stats
+            WHERE user_id = ? AND gw = ? AND season = ? AND stat_type = ? AND division = ?
+        ''', (member.id, gw, season, stat_type.lower(), division)) as cursor:
+            result = await cursor.fetchone()
+            stat_count = result[0]
+        
+        if stat_count == 0:
+            await interaction.response.send_message(f"❌ No stats found for {member.mention} in {division} GW{gw} Season {season}")
+            return
+        
+        # Delete the stat entry
+        await db.execute('''
+            DELETE FROM player_gw_stats
+            WHERE user_id = ? AND gw = ? AND season = ? AND stat_type = ? AND division = ?
+            LIMIT 1
+        ''', (member.id, gw, season, stat_type.lower(), division))
+        await db.commit()
+    
+    stat_emojis = {
+        "goal": "⚽",
+        "assist": "🎯",
+        "defender cleansheet": "🛡️",
+        "goalkeeper cleansheet": "🧤",
+        "totw": "📊",
+        "motm": "⭐"
+    }
+    emoji = stat_emojis.get(stat_type.lower(), "")
+    await interaction.response.send_message(f"{emoji} Removed {count} {stat_type}(s) from {member.mention} for {division} GW{gw} Season {season}!")
+
 bot.run(TOKEN)

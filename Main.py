@@ -34,6 +34,7 @@ async def init_db():
                 season INTEGER,
                 stat_type TEXT,
                 count INTEGER,
+                division TEXT DEFAULT 'Div 1',
                 FOREIGN KEY(user_id) REFERENCES player_stats(user_id)
             )
         ''')
@@ -240,8 +241,28 @@ async def profile(interaction: discord.Interaction, member: discord.Member = Non
             if stat_type in stats:
                 stats[stat_type] = total
     
-    # Calculate points
-    points = (stats["goal"] * 3) + (stats["assist"] * 2) + (stats["defender cleansheet"] * 1) + (stats["goalkeeper cleansheet"] * 1) + (stats["motm"] * 5) + (stats["totw"] * 10)
+    # Point values by division and stat type
+    div_points = {
+        "Div 1": {"goal": 9, "assist": 7, "defender cleansheet": 10, "goalkeeper cleansheet": 12, "motm": 8, "totw": 8},
+        "Div 2": {"goal": 6, "assist": 5, "defender cleansheet": 8, "goalkeeper cleansheet": 10, "motm": 6, "totw": 6},
+        "Div 3": {"goal": 3, "assist": 2, "defender cleansheet": 6, "goalkeeper cleansheet": 8, "motm": 3, "totw": 3}
+    }
+    
+    # Calculate points from player_gw_stats with division-based values
+    points = 0
+    if stats_data:
+        async with aiosqlite.connect('vrfs_stats.db') as db:
+            async with db.execute('''
+                SELECT stat_type, division, SUM(count) as total
+                FROM player_gw_stats
+                WHERE user_id = ?
+                GROUP BY stat_type, division
+            ''', (member.id,)) as cursor:
+                gw_stats = await cursor.fetchall()
+        
+        for stat_type, division, total in gw_stats:
+            if division in div_points and stat_type in div_points[division]:
+                points += div_points[division][stat_type] * total
     
     # Determine rank
     if points >= 300:
@@ -296,9 +317,17 @@ async def set_gw_season(interaction: discord.Interaction, gw: int, season: int):
     gw="GameWeek (1-22)",
     season="Season (1, 2, or 3)",
     stat_type="Type of stat (goal, assist, defender cleansheet, goalkeeper cleansheet, totw, motm)",
-    count="Number of stats to add"
+    count="Number of stats to add",
+    division="Division (Div 1, Div 2, or Div 3)"
 )
-async def addstat(interaction: discord.Interaction, member: discord.Member, gw: int, season: int, stat_type: str, count: int):
+@app_commands.choices(
+    division=[
+        app_commands.Choice(name="Div 1", value="Div 1"),
+        app_commands.Choice(name="Div 2", value="Div 2"),
+        app_commands.Choice(name="Div 3", value="Div 3")
+    ]
+)
+async def addstat(interaction: discord.Interaction, member: discord.Member, gw: int, season: int, stat_type: str, count: int, division: str = "Div 1"):
     if not is_moderator(interaction):
         await interaction.response.send_message("❌ You don't have permission to use this command")
         return
@@ -332,9 +361,9 @@ async def addstat(interaction: discord.Interaction, member: discord.Member, gw: 
     async with aiosqlite.connect('vrfs_stats.db') as db:
         await db.execute('INSERT OR IGNORE INTO player_stats (user_id) VALUES (?)', (member.id,))
         await db.execute('''
-            INSERT INTO player_gw_stats (user_id, gw, season, stat_type, count)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (member.id, gw, season, stat_type.lower(), count))
+            INSERT INTO player_gw_stats (user_id, gw, season, stat_type, count, division)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (member.id, gw, season, stat_type.lower(), count, division))
         await db.commit()
     
     stat_emojis = {
@@ -346,6 +375,6 @@ async def addstat(interaction: discord.Interaction, member: discord.Member, gw: 
         "motm": "⭐"
     }
     emoji = stat_emojis.get(stat_type.lower(), "")
-    await interaction.response.send_message(f"{emoji} Added {count} {stat_type}(s) to {member.mention} for GW{gw} Season {season}!")
+    await interaction.response.send_message(f"{emoji} Added {count} {stat_type}(s) to {member.mention} for {division} GW{gw} Season {season}!")
 
 bot.run(TOKEN)

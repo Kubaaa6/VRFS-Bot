@@ -541,16 +541,48 @@ async def removestats(
             await db.execute('UPDATE player_gw_stats SET count = count - ? WHERE id = ?', (count, entry_id))
         await db.commit()
     
-    stat_emojis = {
-        "goal": "⚽",
-        "assist": "🎯",
-        "defender cleansheet": "🛡️",
-        "goalkeeper cleansheet": "🧤",
-        "totw": "📊",
-        "motm": "⭐"
-    }
-    emoji = stat_emojis.get(stat_type.lower(), "")
-    await interaction.response.send_message(f"{emoji} Removed {count} {stat_type}(s) from {member.mention} for {division} GW{gw} Season {season}!")
+    # DM the user about the stat removal
+    try:
+        # Get new totals for this division
+        async with aiosqlite.connect('vrfs_stats.db') as db:
+            async with db.execute('''
+                SELECT stat_type, SUM(count) as total
+                FROM player_gw_stats
+                WHERE user_id = ? AND division = ?
+                GROUP BY stat_type
+            ''', (member.id, division)) as cursor:
+                div_stats = {row[0]: row[1] for row in await cursor.fetchall()}
+        # Points for this stat
+        div_points = {
+            "Div 1": {"goal": 9, "assist": 7, "defender cleansheet": 10, "goalkeeper cleansheet": 12, "motm": 8, "totw": 8},
+            "Div 2": {"goal": 6, "assist": 5, "defender cleansheet": 8, "goalkeeper cleansheet": 10, "motm": 6, "totw": 6},
+            "Div 3": {"goal": 3, "assist": 2, "defender cleansheet": 6, "goalkeeper cleansheet": 8, "motm": 3, "totw": 3}
+        }
+        stat_points = div_points[division][stat_type.lower()] * count
+        # Emoji map
+        stat_emojis = {
+            "goal": "⚽",
+            "assist": "🎯",
+            "defender cleansheet": "🛡️",
+            "goalkeeper cleansheet": "🧤",
+            "totw": "📊",
+            "motm": "⭐"
+        }
+        # Compose DM
+        embed = discord.Embed(title="\U0001F514 Stat Update Notification", color=discord.Color.red(), timestamp=interaction.created_at)
+        embed.set_author(name=interaction.user.display_name, icon_url=interaction.user.display_avatar.url)
+        embed.add_field(name="Stat Removed", value=f"Your stats in **{division}** have just been updated.", inline=False)
+        embed.add_field(name="Latest change", value=f"{stat_emojis.get(stat_type.lower(), '')} {stat_type.capitalize()}: -{count}  (**-{stat_points} pts**)", inline=False)
+        # Totals
+        embed.add_field(
+            name=f"Your current totals in {division}",
+            value=f"⚽ Goals: {div_stats.get('goal', 0)}\n🎯 Assists: {div_stats.get('assist', 0)}\n🧤 GK Clean Sheets: {div_stats.get('goalkeeper cleansheet', 0)}\n🛡️ Defender Clean Sheets: {div_stats.get('defender cleansheet', 0)}",
+            inline=False
+        )
+        embed.set_footer(text="Use /profile to view your full stat and value changes.")
+        await member.send(embed=embed)
+    except Exception:
+        pass  # Ignore if user has DMs closed
 
 # --- Transfer Confirmation View ---
 class TransferConfirmView(discord.ui.View):

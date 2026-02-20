@@ -522,24 +522,23 @@ async def removestats(
         return
     
     async with aiosqlite.connect('vrfs_stats.db') as db:
-        # Check if the stat exists
+        # Check if the stat exists and get current count
         async with db.execute('''
-            SELECT COUNT(*) as count FROM player_gw_stats
+            SELECT id, count FROM player_gw_stats
             WHERE user_id = ? AND gw = ? AND season = ? AND stat_type = ? AND division = ?
+            ORDER BY id LIMIT 1
         ''', (member.id, gw, season, stat_type.lower(), division)) as cursor:
-            result = await cursor.fetchone()
-            stat_count = result[0]
-        
-        if stat_count == 0:
+            row = await cursor.fetchone()
+        if not row:
             await interaction.response.send_message(f"❌ No stats found for {member.mention} in {division} GW{gw} Season {season}")
             return
-        
-        # Delete the stat entry
-        await db.execute('''
-            DELETE FROM player_gw_stats
-            WHERE user_id = ? AND gw = ? AND season = ? AND stat_type = ? AND division = ?
-            LIMIT 1
-        ''', (member.id, gw, season, stat_type.lower(), division))
+        entry_id, current_count = row
+        if count >= current_count:
+            # Remove entry
+            await db.execute('DELETE FROM player_gw_stats WHERE id = ?', (entry_id,))
+        else:
+            # Subtract count
+            await db.execute('UPDATE player_gw_stats SET count = count - ? WHERE id = ?', (count, entry_id))
         await db.commit()
     
     stat_emojis = {
